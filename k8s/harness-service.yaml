@@ -1,0 +1,39 @@
+service:
+  name: pr-guardian-backend
+  identifier: prguardianbackend
+  tags: {}
+  serviceDefinition:
+    spec:
+      manifests:
+        - manifest:
+            identifier: k8s_manifests
+            type: K8sManifest
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: connector_Github_e9c7
+                  gitFetchType: Branch
+                  paths:
+                    - k8s/namespace.yaml
+                    - k8s/configmap.yaml
+                    - k8s/deployment.yaml
+                    - k8s/service.yaml
+                    - k8s/ingress.yaml
+                    - k8s/secret.yaml
+                  repoName: hktn07
+                  branch: main
+              valuesPaths: []
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
+      artifacts:
+        primary:
+          primaryArtifactRef: prguardianimage
+          sources:
+            - spec:
+                connectorRef: harnessdockerregistry
+                imagePath: <+input>  # Will prompt for: yourusername/pr-guardian-backend
+                tag: <+input>  # Will prompt for: latest or v1.0.0
+              identifier: prguardianimage
+              type: DockerRegistry
+    type: Kubernetes

@@ -1,0 +1,19 @@
+# PR Guardian Backend - Devspace Pipeline Input
+# Copy this file to: harness-pl-infra/devspaces/<your-devspace-name>/pipeline-input.yaml
+
+modules:
+  platform: true
+  ci: false
+  cd: false
+
+overrides:
+  # Redis dependency (if not already available in devspace)
+  redis:
+    install: true
+    version: "7.0"
+
+  # PR Guardian Backend Service
+  pr-guardian-backend:
+    install: true
+    version: "v1.0.0"  # Update this with the version from build output
+    enabled: true

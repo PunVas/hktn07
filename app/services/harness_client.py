@@ -168,6 +168,47 @@ class HarnessClient:
             return data
         return data.get("files", [])
 
+    def get_pull_request_reviewers(self, repo: str, pr_id: int) -> list[dict[str, Any]]:
+        """
+        Fetch the reviewers assigned to a pull request.
+
+        GET /code/api/v1/repos/{repo}/pullreq/{pr_id}/reviewers
+
+        Returns a list of reviewer objects (one per assigned reviewer).
+        Reviewer-endpoint failures are non-fatal; an empty list is returned
+        in that case.
+        """
+        repo_path = self._build_repo_path(repo)
+        url = f"/code/api/v1/repos/{repo_path}/pullreq/{pr_id}/reviewers"
+        params = {
+            "accountIdentifier": self._account_id,
+            "orgIdentifier": self._org_id,
+            "projectIdentifier": self._project_id,
+        }
+
+        with self._make_client() as client:
+            try:
+                response = client.get(url, params=params)
+            except (httpx.TimeoutException, httpx.RequestError):
+                logger.warning(
+                    "Failed to fetch PR reviewers, continuing with empty list",
+                    extra={"pr_id": pr_id},
+                )
+                return []
+
+        if response.status_code != 200:
+            logger.warning(
+                "PR reviewers endpoint returned non-200",
+                extra={"pr_id": pr_id, "status_code": response.status_code},
+            )
+            return []
+
+        data = response.json()
+        # Harness returns a list of reviewer objects, or {"reviewer": [...]}.
+        if isinstance(data, list):
+            return data
+        return data.get("reviewer", [])
+
 
 # Module-level singleton
 _client: HarnessClient | None = None

@@ -13,38 +13,9 @@ from app.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-# ---------------------------------------------------------------------------
-# Severity thresholds
-# ---------------------------------------------------------------------------
-
-SEVERITY_RED_THRESHOLD = 75
-SEVERITY_AMBER_THRESHOLD = 50
-
-# ---------------------------------------------------------------------------
-# Complexity weights
-# ---------------------------------------------------------------------------
-
-COMPLEXITY_FILES_WEIGHT = 0.4
-COMPLEXITY_LINES_WEIGHT = 0.3
-COMPLEXITY_BLAST_WEIGHT = 0.3
-
 # Max values used for normalisation (adjust based on real PRs)
 MAX_FILES = 100
-MAX_LINES = 5000
 MAX_BLAST_RADIUS = 20
-
-
-# ---------------------------------------------------------------------------
-# Dominant factor labels / icons
-# ---------------------------------------------------------------------------
-
-_FACTOR_ICONS: dict[str, str] = {
-    "Blast Radius": "blast",
-    "Lines Changed": "lines",
-    "Files Changed": "files",
-    "Complexity": "complexity",
-    "Review Time": "clock",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +46,10 @@ def _parse_iso(ts: str | None) -> datetime | None:
 # Metrics extraction
 # ---------------------------------------------------------------------------
 
-def extract_pr_metadata(raw: dict[str, Any]) -> dict[str, Any]:
+def extract_pr_metadata(
+    raw: dict[str, Any],
+    reviewers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """
     Extract normalised fields from the Harness PR API response.
 
@@ -117,6 +91,16 @@ def extract_pr_metadata(raw: dict[str, Any]) -> dict[str, Any]:
         delta = updated - created
         review_time_hours = int(delta.total_seconds() / 3600)
 
+    # PR age = time since the PR was opened (hours).
+    pr_age_hours = 0
+    if created:
+        delta = datetime.now(timezone.utc) - created
+        pr_age_hours = max(int(delta.total_seconds() / 3600), 0)
+
+    # Current number of reviewers — the "list reviewers" response is an array
+    # of reviewer objects, so the count is simply its length.
+    reviewers_count = len(reviewers) if isinstance(reviewers, list) else 0
+
     return {
         "pr_id": raw.get("number", 0),
         "title": raw.get("title", ""),
@@ -129,6 +113,8 @@ def extract_pr_metadata(raw: dict[str, Any]) -> dict[str, Any]:
         "lines_deleted": lines_deleted,
         "commits": commits,
         "review_time": review_time_hours,
+        "pr_age_hours": pr_age_hours,
+        "reviewers_count": reviewers_count,
     }
 
 
@@ -338,89 +324,68 @@ def compute_blast_radius(
 
 
 # ---------------------------------------------------------------------------
-# Complexity score
+# Criticality score
 # ---------------------------------------------------------------------------
 
-def compute_complexity(
+def compute_criticality(
+    lines_changed: int,
     files_changed: int,
-    lines_added: int,
-    lines_deleted: int,
-    blast_radius_score: int,
+    pr_age_hours: int,
 ) -> int:
     """
-    Weighted complexity score 0–100.
-    Combines file count, total line delta, and blast radius.
+    Criticality score (0–100).
+
+    Params:
+        lines_changed: total LoC changed (additions + deletions)
+        files_changed: number of files changed in the PR
+        pr_age_hours:  age of the PR in hours (time since it was opened)
+
+    TODO: replace with the mathematical model once provided.
     """
-    total_lines = lines_added + lines_deleted
-    file_norm = _normalise(files_changed, MAX_FILES)
-    line_norm = _normalise(total_lines, MAX_LINES)
-    blast_norm = blast_radius_score / 100.0
-
-    raw = (
-        file_norm * COMPLEXITY_FILES_WEIGHT
-        + line_norm * COMPLEXITY_LINES_WEIGHT
-        + blast_norm * COMPLEXITY_BLAST_WEIGHT
-    ) * 100
-
-    return _clamp(raw)
+    # Placeholder until the mathematical model is supplied.
+    return 0
 
 
 # ---------------------------------------------------------------------------
-# Severity score
+# Review time estimate
 # ---------------------------------------------------------------------------
 
-def compute_severity(
-    complexity: int,
-    files_changed: int,
-    lines_added: int,
-    lines_deleted: int,
-    review_time: int,
-    blast_radius_score: int,
-) -> tuple[int, str, str, str]:
+def compute_review_time(
+    lines_changed: int,
+    reviewers_count: int,
+) -> int:
     """
-    Compute the overall severity score (0–100) and determine
-    the dominant factor, its icon, and severity color.
+    Estimated review time (0–100, or hours — TBD by model).
 
-    Returns:
-        (severity_score, severity_color, dominant_factor, dominant_factor_icon)
+    Params:
+        lines_changed:   total LoC changed (additions + deletions)
+        reviewers_count: current number of reviewers on the PR
+
+    TODO: replace with the mathematical model once provided.
     """
-    total_lines = lines_added + lines_deleted
+    # Placeholder until the mathematical model is supplied.
+    return 0
 
-    # Normalize individual factors to 0–100
-    factor_scores: dict[str, int] = {
-        "Blast Radius": blast_radius_score,
-        "Lines Changed": _clamp(_normalise(total_lines, MAX_LINES) * 100),
-        "Files Changed": _clamp(_normalise(files_changed, MAX_FILES) * 100),
-        "Complexity": complexity,
-        "Review Time": _clamp(_normalise(review_time, 72) * 100),  # 72h = max
-    }
 
-    # Weighted average
-    weights = {
-        "Blast Radius": 0.30,
-        "Lines Changed": 0.20,
-        "Files Changed": 0.15,
-        "Complexity": 0.25,
-        "Review Time": 0.10,
-    }
+# ---------------------------------------------------------------------------
+# Reviewers needed
+# ---------------------------------------------------------------------------
 
-    severity_score = _clamp(
-        sum(factor_scores[k] * weights[k] for k in factor_scores)
-    )
+def compute_reviewer_needed(
+    lines_changed: int,
+    file_type_count: int,
+) -> int:
+    """
+    Recommended number of reviewers.
 
-    # Dominant factor = highest individual score
-    dominant_factor = max(factor_scores, key=lambda k: factor_scores[k])
-    dominant_factor_icon = _FACTOR_ICONS[dominant_factor]
+    Params:
+        lines_changed:   total LoC changed (additions + deletions)
+        file_type_count: number of different file types touched
 
-    # Severity color
-    if severity_score >= SEVERITY_RED_THRESHOLD:
-        severity_color = "red"
-    elif severity_score >= SEVERITY_AMBER_THRESHOLD:
-        severity_color = "amber"
-    else:
-        severity_color = "green"
-
-    return severity_score, severity_color, dominant_factor, dominant_factor_icon
+    TODO: replace with the mathematical model once provided.
+    """
+    # Placeholder until the mathematical model is supplied.
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -430,62 +395,67 @@ def compute_severity(
 def compute_full_analysis(
     raw_pr: dict[str, Any],
     files: list[dict[str, Any]],
+    reviewers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """
     Orchestrate the complete metric computation pipeline.
 
     Args:
-        raw_pr:  Raw Harness PR API response dict.
-        files:   List of file diff dicts from the files endpoint.
-                 Each entry may contain a `patch` field with unified diff text
-                 for function-level blast radius analysis.
+        raw_pr:    Raw Harness PR API response dict.
+        files:     List of file diff dicts from the files endpoint.
+                   Each entry may contain a `patch` field with unified diff text
+                   for function-level blast radius analysis.
+        reviewers: "list reviewers" response — an array of reviewer objects;
+                   its length is used as the current reviewer count.
 
     Returns:
         Dict ready for upsert_pr_analysis().
     """
-    metadata = extract_pr_metadata(raw_pr)
+    metadata = extract_pr_metadata(raw_pr, reviewers)
 
     blast_radius_graph, blast_radius_score = compute_blast_radius(files, metadata)
 
-    complexity = compute_complexity(
+    lines_changed = metadata["lines_added"] + metadata["lines_deleted"]
+
+    # Number of different file types touched (distinct languages from the diff).
+    file_summaries: list[FileDiffSummary] = parse_pr_files(files)
+    file_type_count = len({s.language for s in file_summaries})
+
+    criticality = compute_criticality(
+        lines_changed=lines_changed,
         files_changed=metadata["files_changed"],
-        lines_added=metadata["lines_added"],
-        lines_deleted=metadata["lines_deleted"],
-        blast_radius_score=blast_radius_score,
+        pr_age_hours=metadata["pr_age_hours"],
     )
 
-    severity_score, severity_color, dominant_factor, dominant_factor_icon = compute_severity(
-        complexity=complexity,
-        files_changed=metadata["files_changed"],
-        lines_added=metadata["lines_added"],
-        lines_deleted=metadata["lines_deleted"],
-        review_time=metadata["review_time"],
-        blast_radius_score=blast_radius_score,
+    review_time = compute_review_time(
+        lines_changed=lines_changed,
+        reviewers_count=metadata["reviewers_count"],
+    )
+
+    reviewer_needed = compute_reviewer_needed(
+        lines_changed=lines_changed,
+        file_type_count=file_type_count,
     )
 
     logger.info(
         "Analysis computed",
         extra={
             "pr_id": metadata["pr_id"],
-            "severity_score": severity_score,
-            "severity_color": severity_color,
-            "dominant_factor": dominant_factor,
-            "complexity": complexity,
+            "criticality": criticality,
+            "review_time": review_time,
+            "reviewer_needed": reviewer_needed,
             "blast_radius_score": blast_radius_score,
         },
     )
 
     return {
         "pr_metadata": metadata,
-        "severity_score": severity_score,
-        "severity_color": severity_color,
-        "dominant_factor": dominant_factor,
-        "dominant_factor_icon": dominant_factor_icon,
-        "complexity": complexity,
+        "criticality": criticality,
+        "review_time": review_time,
+        "reviewer_needed": reviewer_needed,
         "files_changed": metadata["files_changed"],
         "lines_added": metadata["lines_added"],
         "lines_deleted": metadata["lines_deleted"],
-        "review_time": metadata["review_time"],
         "blast_radius_score": blast_radius_score,
         "blast_radius_graph": blast_radius_graph,
     }

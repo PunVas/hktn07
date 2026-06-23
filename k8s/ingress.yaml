@@ -1,0 +1,28 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pr-guardian
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  labels:
+    app: pr-guardian
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - pr-guardian.bootcamp-playground.pr2.harness.io
+    secretName: pr-guardian-tls
+  rules:
+  - host: pr-guardian.bootcamp-playground.pr2.harness.io
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: pr-guardian
+            port:
+              number: 8000

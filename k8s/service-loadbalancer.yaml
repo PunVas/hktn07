@@ -1,0 +1,44 @@
+# Alternative: LoadBalancer Service (instead of ClusterIP + Ingress)
+#
+# Use this if:
+# - You want direct external access
+# - You don't mind getting a random IP/hostname
+# - Cost is not a concern
+# - You're not in a shared environment
+#
+# Replace service.yaml and delete ingress.yaml
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: pr-guardian-loadbalancer
+  namespace: default
+  labels:
+    app: pr-guardian
+spec:
+  type: LoadBalancer  # Changed from ClusterIP
+  ports:
+  - name: http
+    port: 80          # External port (standard HTTP)
+    targetPort: 8000  # Your app's port
+    protocol: TCP
+  selector:
+    app: pr-guardian
+
+  # Optional: Request a specific IP (if available)
+  # loadBalancerIP: 35.123.45.67
+
+  # Optional: Restrict access to specific IPs
+  # loadBalancerSourceRanges:
+  #   - 203.0.113.0/24
+  #   - 198.51.100.0/24
+
+---
+# After deploying, get the external IP:
+# kubectl get svc pr-guardian-loadbalancer -n <namespace>
+#
+# Output will show:
+# NAME                        TYPE           EXTERNAL-IP
+# pr-guardian-loadbalancer    LoadBalancer   a1b2c3.us-west-2.elb.amazonaws.com
+#
+# Access via: http://a1b2c3.us-west-2.elb.amazonaws.com/api/health

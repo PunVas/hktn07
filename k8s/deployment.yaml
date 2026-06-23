@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pr-guardian
+  namespace: default
+  labels:
+    app: pr-guardian
+    version: v1
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: pr-guardian
+  template:
+    metadata:
+      labels:
+        app: pr-guardian
+        version: v1
+    spec:
+      containers:
+      - name: pr-guardian
+        image: <+artifact.image>
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: APP_HOST
+          value: "0.0.0.0"
+        - name: APP_PORT
+          value: "8000"
+        - name: LOG_LEVEL
+          value: "INFO"
+        - name: DATABASE_URL
+          value: "sqlite:///./prguardian.db"
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: pr-guardian-secrets
+              key: redis-url
+        - name: HARNESS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: pr-guardian-secrets
+              key: harness-api-key
+        - name: HARNESS_BASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: pr-guardian-config
+              key: harness-base-url
+        - name: HARNESS_ACCOUNT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: pr-guardian-config
+              key: harness-account-id
+        - name: HARNESS_ORG_ID
+          valueFrom:
+            configMapKeyRef:
+              name: pr-guardian-config
+              key: harness-org-id
+        - name: HARNESS_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: pr-guardian-config
+              key: harness-project-id
+        - name: RQ_QUEUE_NAME
+          value: "pr_guardian"
+        - name: WORKER_MAX_RETRIES
+          value: "3"
+        - name: CORS_ORIGINS
+          value: '["*"]'
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: pr-guardian-pvc
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pr-guardian-config
+  namespace: default
+  labels:
+    app: pr-guardian
+data:
+  harness-base-url: "https://harness0.harness.io/"
+  harness-account-id: "l7B_kbSEQD2wjrM7PShm5w"
+  harness-org-id: "PROD"
+  harness-project-id: "Harness_Commons"

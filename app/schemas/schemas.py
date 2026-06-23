@@ -56,6 +56,9 @@ class PRMetrics(BaseModel):
     lines_deleted: int
     review_time: int
     blast_radius_score: int
+    criticality: int
+    estimated_review_time: int
+    reviewers_needed: int
 
     model_config = {"from_attributes": True}
 

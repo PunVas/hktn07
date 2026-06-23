@@ -114,6 +114,9 @@ def upsert_pr_analysis(
     review_time: int,
     blast_radius_score: int,
     blast_radius_graph: dict[str, Any],
+    criticality: int = 0,
+    estimated_review_time: int = 0,
+    reviewers_needed: int = 0,
     processing_duration_ms: int | None = None,
 ) -> PRAnalysis:
     """Create or update a PR analysis record."""
@@ -136,6 +139,9 @@ def upsert_pr_analysis(
             review_time=review_time,
             blast_radius_score=blast_radius_score,
             blast_radius_graph=blast_radius_graph,
+            criticality=criticality,
+            estimated_review_time=estimated_review_time,
+            reviewers_needed=reviewers_needed,
             last_updated=now,
             processing_duration_ms=processing_duration_ms,
         )
@@ -153,6 +159,9 @@ def upsert_pr_analysis(
         analysis.review_time = review_time
         analysis.blast_radius_score = blast_radius_score
         analysis.blast_radius_graph = blast_radius_graph
+        analysis.criticality = criticality
+        analysis.estimated_review_time = estimated_review_time
+        analysis.reviewers_needed = reviewers_needed
         analysis.last_updated = now
         analysis.processing_duration_ms = processing_duration_ms
         db.flush()

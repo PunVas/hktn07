@@ -132,6 +132,9 @@ def _run_pr_analysis(
             review_time=analysis_result["review_time"],
             blast_radius_score=analysis_result["blast_radius_score"],
             blast_radius_graph=analysis_result["blast_radius_graph"],
+            criticality=analysis_result["criticality"],
+            estimated_review_time=analysis_result["estimated_review_time"],
+            reviewers_needed=analysis_result["reviewers_needed"],
             processing_duration_ms=processing_duration_ms,
         )
 

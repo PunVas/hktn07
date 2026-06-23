@@ -120,6 +120,9 @@ class PRAnalysis(Base):
     lines_deleted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     review_time: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     blast_radius_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    criticality: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_review_time: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    reviewers_needed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Blast radius graph (JSON)
     blast_radius_graph: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)

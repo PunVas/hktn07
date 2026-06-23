@@ -6,6 +6,7 @@ Pure functions — no side effects, fully testable.
 """
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -34,6 +35,17 @@ COMPLEXITY_BLAST_WEIGHT = 0.3
 MAX_FILES = 100
 MAX_LINES = 5000
 MAX_BLAST_RADIUS = 20
+
+# ---------------------------------------------------------------------------
+# Additional metric normalisation bounds
+# ---------------------------------------------------------------------------
+
+# Criticality — lines, files, PR age
+MAX_PR_AGE_HOURS = 24 * 14  # 14 days = max age signal
+
+# Estimated review time — lines, current reviewer count
+MAX_FILE_TYPES = 15  # distinct file types used for reviewers_needed
+MAX_REVIEWERS_NEEDED = 6  # cap on suggested reviewer count
 
 
 # ---------------------------------------------------------------------------
@@ -426,6 +438,144 @@ def compute_severity(
 
 
 # ---------------------------------------------------------------------------
+# Criticality score
+# ---------------------------------------------------------------------------
+ 
+def compute_criticality(
+    lines_added: int,
+    lines_deleted: int,
+    files_changed: int,
+    pr_age_hours: int,
+) -> int:
+    """
+    Criticality score 0–100.
+ 
+    Three sub-scores (each 0–10) are combined with fixed weights and
+    scaled to 0–100:
+ 
+        lines_changed = lines_added + lines_deleted
+ 
+        S_loc  = min(10, log10(1 + lines_changed) * 2.5)
+        S_file = min(10, log10(1 + files_changed) * 4.0)
+        S_age  = min(10, pr_age_hours / 4.8)      # saturates at ~48 h
+ 
+        CS = 0.50 * S_loc + 0.30 * S_file + 0.20 * S_age   # 0–10
+        return round(CS * 10)                                 # 0–100
+ 
+    Severity bands:
+        Low    score <  35
+        Medium 35 <= score < 65
+        High   score >= 65
+ 
+    Parameters:
+        lines_added:   lines added in the PR
+        lines_deleted: lines deleted in the PR
+        files_changed: number of files changed
+        pr_age_hours:  hours elapsed since the PR was opened
+    """
+    # --- tunable constants ---
+    W_LOC   = 0.50   # weight: code volume
+    W_FILE  = 0.30   # weight: file count
+    W_AGE   = 0.20   # weight: PR age
+    AGE_SAT = 4.8    # age divisor; S_age saturates at AGE_SAT * 10 hours
+ 
+    lines_changed = lines_added + lines_deleted
+ 
+    s_loc  = min(10.0, math.log10(1 + lines_changed) * 2.5)
+    s_file = min(10.0, math.log10(1 + files_changed) * 4.0)
+    s_age  = min(10.0, pr_age_hours / AGE_SAT)
+ 
+    cs = W_LOC * s_loc + W_FILE * s_file + W_AGE * s_age
+    return round(cs * 10)
+ 
+ 
+# ---------------------------------------------------------------------------
+# Estimated review time
+# ---------------------------------------------------------------------------
+ 
+def compute_estimated_review_time(
+    lines_added: int,
+    lines_deleted: int,
+    files_changed: int,
+    file_type_count: int,
+) -> int:
+    """
+    Estimated review time in minutes.
+ 
+    Three additive terms capture distinct sources of review effort:
+ 
+        lines_changed = lines_added + lines_deleted
+ 
+        RT_loc  = 0.20 * lines_changed ** 0.65   # sub-linear LoC cost
+        RT_file = 1.00 * sqrt(files_changed)      # context-switching overhead
+        RT_tech = 1.50 * max(0, file_type_count - 1)  # per-extra-language cost
+ 
+        RT = 1.0 + RT_loc + RT_file + RT_tech     # minutes
+ 
+    NOTE: files_changed and file_type_count are added vs the original
+    signature — update call sites accordingly.
+ 
+    Parameters:
+        lines_added:     lines added in the PR
+        lines_deleted:   lines deleted in the PR
+        files_changed:   number of files changed
+        file_type_count: number of distinct file types (languages) touched
+    """
+    # --- tunable constants ---
+    RT_OFFSET     = 1.00   # base overhead (minutes)
+    RT_LOC_COEFF  = 0.20   # LoC scaling coefficient
+    RT_LOC_EXP    = 0.65   # sub-linear exponent
+    RT_FILE_COEFF = 1.00   # per-file context-switching coefficient (sqrt-scaled)
+    RT_TECH_COEFF = 1.50   # per-extra-language overhead (minutes, linear)
+ 
+    lines_changed = lines_added + lines_deleted
+ 
+    rt_loc  = RT_LOC_COEFF  * (lines_changed ** RT_LOC_EXP)
+    rt_file = RT_FILE_COEFF * math.sqrt(files_changed)
+    rt_tech = RT_TECH_COEFF * max(0, file_type_count - 1)
+ 
+    return round(RT_OFFSET + rt_loc + rt_file + rt_tech)
+ 
+ 
+# ---------------------------------------------------------------------------
+# Reviewers needed
+# ---------------------------------------------------------------------------
+ 
+def compute_reviewers_needed(
+    lines_added: int,
+    lines_deleted: int,
+    num_file_types: int,
+) -> int:
+    """
+    Suggested number of reviewers (1–6).
+ 
+    Two additive components: a log-scaled volume term and a tech-diversity
+    term (each file type beyond the first adds 0.5 reviewers):
+ 
+        lines_changed = lines_added + lines_deleted
+ 
+        R_vol  = 0.55 * log10(1 + lines_changed)
+        R_tech = 0.50 * max(0, num_file_types - 1)
+        return max(1, min(R_CAP, ceil(R_vol + R_tech)))
+ 
+    Parameters:
+        lines_added:    lines added in the PR
+        lines_deleted:  lines deleted in the PR
+        num_file_types: number of distinct file types (languages) touched
+    """
+    # --- tunable constants ---
+    ALPHA = 0.55   # volume coefficient
+    BETA  = 0.50   # per-extra-type coefficient
+    R_CAP = 6      # hard upper cap
+ 
+    lines_changed = lines_added + lines_deleted
+ 
+    r_vol  = ALPHA * math.log10(1 + lines_changed)
+    r_tech = BETA  * max(0, num_file_types - 1)
+ 
+    return max(1, min(R_CAP, math.ceil(r_vol + r_tech)))
+
+# ---------------------------------------------------------------------------
 # Full analysis pipeline
 # ---------------------------------------------------------------------------
 
@@ -443,14 +593,21 @@ def compute_full_analysis(
     Returns:
         Dict ready for upsert_pr_analysis().
     """
+    now = datetime.now(timezone.utc)
+
     # Calculate review time in hours
     review_time_hours = 0
+    pr_age_hours = 0
     if pr.opened_at:
         # Use closed_at if merged/closed, otherwise use current time
-        end_time = pr.closed_at or pr.merged_at or datetime.now(timezone.utc)
+        end_time = pr.closed_at or pr.merged_at or now
         if end_time > pr.opened_at:
             delta = end_time - pr.opened_at
             review_time_hours = int(delta.total_seconds() / 3600)
+
+        # PR age = time since the PR was opened until now
+        if now > pr.opened_at:
+            pr_age_hours = int((now - pr.opened_at).total_seconds() / 3600)
 
     # Convert diff files to the format expected by blast radius computation
     # For now, we'll create a simplified structure
@@ -495,6 +652,29 @@ def compute_full_analysis(
         blast_radius_score=blast_radius_score,
     )
 
+    # Number of distinct file types touched (by extension)
+    num_file_types = len(
+        {f.filename.rsplit(".", 1)[-1].lower() for f in diff.files if "." in f.filename}
+    )
+
+    criticality = compute_criticality(
+        lines_added=diff.additions,
+        lines_deleted=diff.deletions,
+        files_changed=diff.files_changed,
+        pr_age_hours=pr_age_hours,
+    )
+
+    estimated_review_time = compute_estimated_review_time(
+        lines_added=diff.additions,
+        lines_deleted=diff.deletions,
+    )
+
+    reviewers_needed = compute_reviewers_needed(
+        lines_added=diff.additions,
+        lines_deleted=diff.deletions,
+        num_file_types=num_file_types,
+    )
+
     logger.info(
         "Analysis computed",
         extra={
@@ -504,6 +684,9 @@ def compute_full_analysis(
             "dominant_factor": dominant_factor,
             "complexity": complexity,
             "blast_radius_score": blast_radius_score,
+            "criticality": criticality,
+            "estimated_review_time": estimated_review_time,
+            "reviewers_needed": reviewers_needed,
         },
     )
 
@@ -519,4 +702,7 @@ def compute_full_analysis(
         "review_time": review_time_hours,
         "blast_radius_score": blast_radius_score,
         "blast_radius_graph": blast_radius_graph,
+        "criticality": criticality,
+        "estimated_review_time": estimated_review_time,
+        "reviewers_needed": reviewers_needed,
     }

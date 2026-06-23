@@ -86,6 +86,9 @@ def get_pr_detail(db: Session, pr_id: int) -> PRDetailResponse | None:
             lines_deleted=analysis.lines_deleted,
             review_time=analysis.review_time,
             blast_radius_score=analysis.blast_radius_score,
+            criticality=analysis.criticality,
+            estimated_review_time=analysis.estimated_review_time,
+            reviewers_needed=analysis.reviewers_needed,
         ),
         blast_radius=BlastRadiusGraph(
             center=graph_data.get("center", {}),

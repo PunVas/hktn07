@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Database
-    database_url: str = "postgresql+psycopg2://prguardian:prguardian@postgres:5432/prguardian"
+    database_url: str = "sqlite:///./prguardian.db"
 
     # Redis
     redis_url: str = "redis://redis:6379/0"

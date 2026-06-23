@@ -12,25 +12,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # ---------------------------------------------------------------------------
-# 1. Replace JSONB with JSON in the SQLAlchemy dialect so SQLite can compile
-# ---------------------------------------------------------------------------
-import sqlalchemy.dialects.postgresql as _pg
-_pg.JSONB = JSON  # type: ignore[attr-defined]
-
-# ---------------------------------------------------------------------------
-# 2. Import models so they register with Base.metadata;
-#    then patch any remaining JSONB column types.
+# 1. Import models so they register with Base.metadata
 # ---------------------------------------------------------------------------
 import app.models.models as _models_mod  # noqa: E402
-from sqlalchemy import JSON as _JSON  # noqa: E402
-
-for _table in _models_mod.Base.metadata.tables.values():
-    for _col in _table.columns:
-        if _col.type.__class__.__name__ == "JSONB":
-            _col.type = _JSON()
 
 # ---------------------------------------------------------------------------
-# 3. Build a SQLite in-memory engine with StaticPool (single shared connection)
+# 2. Build a SQLite in-memory engine with StaticPool (single shared connection)
 #    and swap it into app.db.session before the app is created.
 # ---------------------------------------------------------------------------
 import app.db.session as _db_session  # noqa: E402

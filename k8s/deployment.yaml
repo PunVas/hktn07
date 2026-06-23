@@ -5,9 +5,10 @@ metadata:
   namespace: default
   labels:
     app: pr-guardian
+    team: bootcamp
     version: v1
 spec:
-  replicas: 2
+  replicas: 1
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,11 +21,12 @@ spec:
     metadata:
       labels:
         app: pr-guardian
+        team: bootcamp
         version: v1
     spec:
       containers:
       - name: pr-guardian
-        image: <+artifact.image>
+        image: <+artifact.image>:<+artifact.tag>
         imagePullPolicy: Always
         ports:
         - name: http
@@ -45,12 +47,12 @@ spec:
           valueFrom:
             secretKeyRef:
               name: pr-guardian-secrets
-              key: redis-url
+              key: REDIS_URL
         - name: HARNESS_API_KEY
           valueFrom:
             secretKeyRef:
               name: pr-guardian-secrets
-              key: harness-api-key
+              key: HARNESS_API_KEY
         - name: HARNESS_BASE_URL
           valueFrom:
             configMapKeyRef:
@@ -100,12 +102,5 @@ spec:
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
-        volumeMounts:
-        - name: data
-          mountPath: /app/data
-      volumes:
-      - name: data
-        persistentVolumeClaim:
-          claimName: pr-guardian-pvc
       restartPolicy: Always
       terminationGracePeriodSeconds: 30

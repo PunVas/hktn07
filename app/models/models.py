@@ -15,12 +15,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -121,8 +121,8 @@ class PRAnalysis(Base):
     review_time: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     blast_radius_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    # Blast radius graph (JSONB)
-    blast_radius_graph: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Blast radius graph (JSON)
+    blast_radius_graph: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     # Timestamps
     last_updated: Mapped[datetime] = mapped_column(
@@ -151,7 +151,7 @@ class Job(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="queued"
     )  # queued | started | completed | failed
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -183,7 +183,7 @@ class ProcessingLog(Base):
     job_id: Mapped[str] = mapped_column(String(128), nullable=False)
     level: Mapped[str] = mapped_column(String(16), nullable=False, default="INFO")
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

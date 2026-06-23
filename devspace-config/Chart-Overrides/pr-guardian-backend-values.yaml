@@ -1,0 +1,135 @@
+# PR Guardian Backend - Helm Values Override
+# Copy this file to: harness-pl-infra/devspaces/<your-devspace-name>/Chart-Overrides/pr-guardian-backend-values.yaml
+
+# Replica configuration
+replicaCount: 1
+
+# Image configuration
+image:
+  repository: harness/pr-guardian-backend
+  tag: v1.0.0  # Must match version in pipeline-input.yaml
+  pullPolicy: Always
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+  name: pr-guardian
+
+# Resource limits
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Environment variables (non-sensitive)
+env:
+  APP_ENV: "development"
+  APP_HOST: "0.0.0.0"
+  APP_PORT: "8000"
+  LOG_LEVEL: "INFO"
+  DATABASE_URL: "sqlite:///./data/prguardian.db"
+  RQ_QUEUE_NAME: "pr_guardian"
+  WORKER_MAX_RETRIES: "3"
+  CORS_ORIGINS: '["*"]'
+
+# Secret configuration
+# Create secrets manually in the devspace namespace before deployment:
+#   kubectl create secret generic pr-guardian-secrets \
+#     --from-literal=REDIS_URL='redis://redis:6379/0' \
+#     --from-literal=HARNESS_API_KEY='your-pat' \
+#     --from-literal=GITHUB_TOKEN='your-github-token' \
+#     --namespace=<your-devspace>
+secrets:
+  enabled: true
+  name: pr-guardian-secrets
+  keys:
+    - REDIS_URL
+    - HARNESS_API_KEY
+    - GITHUB_TOKEN
+
+# ConfigMap for non-sensitive configuration
+configMap:
+  enabled: true
+  name: pr-guardian-config
+  data:
+    HARNESS_BASE_URL: "https://app.harness.io/"
+    HARNESS_ACCOUNT_ID: "l7B_kbSEQD2wjrM7PShm5w"
+    HARNESS_ORG_ID: "PROD"
+    HARNESS_PROJECT_ID: "Harness_Commons"
+    HARNESS_API_URL: "https://app.harness.io/gateway/code/api/v1"
+    GITHUB_API_URL: "https://api.github.com"
+
+# Health check probes
+probes:
+  liveness:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readiness:
+    enabled: true
+    httpGet:
+      path: /api/health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Ingress configuration
+# Replace <your-devspace> with your actual devspace name
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: pr-guardian.bootcamp-playground.pr2.harness.io
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: pr-guardian
+              port:
+                number: 8000
+
+# Persistent volume for SQLite database
+persistence:
+  enabled: true
+  storageClass: standard
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  mountPath: /app/data
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# Security context
+securityContext:
+  runAsUser: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+
+# Node selector (optional)
+nodeSelector: {}
+
+# Tolerations (optional)
+tolerations: []
+
+# Affinity rules (optional)
+affinity: {}

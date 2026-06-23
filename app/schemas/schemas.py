@@ -14,15 +14,17 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 class SCMEventRequest(BaseModel):
-    provider: str = Field(..., description="SCM provider name, e.g. 'harness'")
+    provider: str = Field(..., description="SCM provider name, e.g. 'harness' or 'github'")
     event: str = Field(..., description="Event type, e.g. 'pr.opened'")
     repository: str = Field(..., description="Full repository name, e.g. 'org/repo'")
     metadata: dict[str, Any] = Field(default_factory=dict)
+    repo_url: str | None = Field(None, description="Full repository URL to detect actual SCM provider")
 
 
 class SCMEventResponse(BaseModel):
-    status: str = "queued"
+    status: str = "completed"
     job_id: str
+    message: str | None = None
 
 
 # ---------------------------------------------------------------------------

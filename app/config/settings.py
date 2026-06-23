@@ -31,12 +31,27 @@ class Settings(BaseSettings):
     # Redis
     redis_url: str = "redis://redis:6379/0"
 
-    # Harness API
+    # Harness API (legacy - for backward compatibility)
     harness_api_key: str = ""
     harness_base_url: str = "https://app.harness.io"
     harness_account_id: str = ""
     harness_org_id: str = ""
     harness_project_id: str = ""
+
+    # Provider configuration (new architecture)
+    github_token: str = ""
+    github_api_url: str = "https://api.github.com"
+    required_checks: str = ""  # Comma-separated list of required check names
+
+    @property
+    def harness_token(self) -> str:
+        """Maps to harness_api_key for backward compatibility."""
+        return self.harness_api_key
+
+    @property
+    def harness_api_url(self) -> str:
+        """Maps to harness_base_url for backward compatibility."""
+        return self.harness_base_url
 
     # Queue
     rq_queue_name: str = "pr_guardian"
@@ -44,6 +59,13 @@ class Settings(BaseSettings):
 
     # CORS
     cors_origins: List[str] = ["http://localhost:3000", "chrome-extension://*"]
+
+    @property
+    def required_checks_list(self) -> list[str]:
+        """Parse comma-separated required checks into a list."""
+        if not self.required_checks:
+            return []
+        return [c.strip() for c in self.required_checks.split(",") if c.strip()]
 
     @field_validator("cors_origins", mode="before")
     @classmethod

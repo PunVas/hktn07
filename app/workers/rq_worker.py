@@ -15,6 +15,9 @@ import os
 import signal
 import sys
 
+# Fix macOS fork safety issue with objc
+os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
+
 from rq import Worker
 from rq.timeouts import JobTimeoutException
 

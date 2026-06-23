@@ -1,6 +1,7 @@
 """
 Metrics computation engine for PR Guardian.
-Takes raw Harness PR data and computes all required metrics.
+Takes canonical domain models (PullRequest, Diff) and computes all required metrics.
+Provider-agnostic — works with GitHub, Harness, or any other SCM provider.
 Pure functions — no side effects, fully testable.
 """
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from app.domain.models import PullRequest, Diff
 from app.services.diff_parser import FileDiffSummary, parse_pr_files
 from app.utils.logging import get_logger
 
@@ -428,45 +430,75 @@ def compute_severity(
 # ---------------------------------------------------------------------------
 
 def compute_full_analysis(
-    raw_pr: dict[str, Any],
-    files: list[dict[str, Any]],
+    pr: PullRequest,
+    diff: Diff,
 ) -> dict[str, Any]:
     """
     Orchestrate the complete metric computation pipeline.
 
     Args:
-        raw_pr:  Raw Harness PR API response dict.
-        files:   List of file diff dicts from the files endpoint.
-                 Each entry may contain a `patch` field with unified diff text
-                 for function-level blast radius analysis.
+        pr:    Canonical PullRequest domain model (provider-agnostic).
+        diff:  Canonical Diff domain model with file changes.
 
     Returns:
         Dict ready for upsert_pr_analysis().
     """
-    metadata = extract_pr_metadata(raw_pr)
+    # Calculate review time in hours
+    review_time_hours = 0
+    if pr.opened_at:
+        # Use closed_at if merged/closed, otherwise use current time
+        end_time = pr.closed_at or pr.merged_at or datetime.now(timezone.utc)
+        if end_time > pr.opened_at:
+            delta = end_time - pr.opened_at
+            review_time_hours = int(delta.total_seconds() / 3600)
 
-    blast_radius_graph, blast_radius_score = compute_blast_radius(files, metadata)
+    # Convert diff files to the format expected by blast radius computation
+    # For now, we'll create a simplified structure
+    files_for_blast_radius: list[dict[str, Any]] = [
+        {
+            "path": f.filename,
+            "additions": f.additions,
+            "deletions": f.deletions,
+            "status": f.status,
+        }
+        for f in diff.files
+    ]
+
+    metadata = {
+        "pr_id": pr.number,
+        "title": pr.title,
+        "author": pr.author,
+        "state": pr.state.value,
+        "source_branch": pr.source_branch,
+        "target_branch": pr.target_branch,
+        "files_changed": diff.files_changed,
+        "lines_added": diff.additions,
+        "lines_deleted": diff.deletions,
+        "review_time": review_time_hours,
+    }
+
+    blast_radius_graph, blast_radius_score = compute_blast_radius(files_for_blast_radius, metadata)
 
     complexity = compute_complexity(
-        files_changed=metadata["files_changed"],
-        lines_added=metadata["lines_added"],
-        lines_deleted=metadata["lines_deleted"],
+        files_changed=diff.files_changed,
+        lines_added=diff.additions,
+        lines_deleted=diff.deletions,
         blast_radius_score=blast_radius_score,
     )
 
     severity_score, severity_color, dominant_factor, dominant_factor_icon = compute_severity(
         complexity=complexity,
-        files_changed=metadata["files_changed"],
-        lines_added=metadata["lines_added"],
-        lines_deleted=metadata["lines_deleted"],
-        review_time=metadata["review_time"],
+        files_changed=diff.files_changed,
+        lines_added=diff.additions,
+        lines_deleted=diff.deletions,
+        review_time=review_time_hours,
         blast_radius_score=blast_radius_score,
     )
 
     logger.info(
         "Analysis computed",
         extra={
-            "pr_id": metadata["pr_id"],
+            "pr_id": pr.number,
             "severity_score": severity_score,
             "severity_color": severity_color,
             "dominant_factor": dominant_factor,
@@ -476,16 +508,15 @@ def compute_full_analysis(
     )
 
     return {
-        "pr_metadata": metadata,
         "severity_score": severity_score,
         "severity_color": severity_color,
         "dominant_factor": dominant_factor,
         "dominant_factor_icon": dominant_factor_icon,
         "complexity": complexity,
-        "files_changed": metadata["files_changed"],
-        "lines_added": metadata["lines_added"],
-        "lines_deleted": metadata["lines_deleted"],
-        "review_time": metadata["review_time"],
+        "files_changed": diff.files_changed,
+        "lines_added": diff.additions,
+        "lines_deleted": diff.deletions,
+        "review_time": review_time_hours,
         "blast_radius_score": blast_radius_score,
         "blast_radius_graph": blast_radius_graph,
     }

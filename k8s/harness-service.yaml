@@ -22,7 +22,8 @@ service:
                     - k8s/secret.yaml
                   repoName: hktn07
                   branch: main
-              valuesPaths: []
+              valuesPaths:
+                - k8s/values.yaml
               skipResourceVersioning: false
               enableDeclarativeRollback: false
       artifacts:

@@ -15,7 +15,6 @@ service:
                   connectorRef: connector_Github_e9c7
                   gitFetchType: Branch
                   paths:
-                    - k8s/namespace.yaml
                     - k8s/configmap.yaml
                     - k8s/deployment.yaml
                     - k8s/service.yaml

@@ -32,8 +32,8 @@ service:
           sources:
             - spec:
                 connectorRef: harnessdockerregistry
-                imagePath: <+input>  # Will prompt for: yourusername/pr-guardian-backend
-                tag: <+input>  # Will prompt for: latest or v1.0.0
+                imagePath: punvas/pr-guardian-backend
+                tag: latest
               identifier: prguardianimage
               type: DockerRegistry
     type: Kubernetes

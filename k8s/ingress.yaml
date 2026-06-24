@@ -4,13 +4,13 @@ metadata:
   name: pr-guardian
   namespace: hank-ns-7
   annotations:
+    kubernetes.io/ingress.class: "nginx"
     nginx.ingress.kubernetes.io/rewrite-target: /
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
   labels:
     app: pr-guardian
 spec:
-  ingressClassName: nginx
   tls:
   - hosts:
     - pr-guardian.bootcamp-playground.pr2.harness.io

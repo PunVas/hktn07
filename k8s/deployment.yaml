@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
       - name: pr-guardian
-        image: <+artifact.image>:<+artifact.tag>
+        image: {{ .Values.image }}:{{ .Values.tag }}
         imagePullPolicy: Always
         ports:
         - name: http
